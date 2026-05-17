@@ -197,37 +197,6 @@ h3{font-size:12px;font-weight:700;color:var(--ink2);margin-bottom:.75rem;text-tr
 </head>
 <body>
 
-<!-- ══ クラウド設定画面（初回のみ） ══ -->
-<div class="login-screen" id="setup-screen" style="display:none">
-  <div class="login-box" style="max-width:440px">
-    <div class="login-logo">
-      <div class="brand">クラウド設定</div>
-      <div class="sub">JSONBin.io を使って全端末でデータ共有</div>
-    </div>
-    <div style="background:var(--green-pale);border-left:3px solid var(--green);border-radius:var(--r-sm);padding:12px 14px;font-size:12px;color:var(--green2);margin-bottom:1rem;line-height:1.8">
-      <strong>無料セットアップ手順（3分）</strong><br>
-      ① <a href="https://jsonbin.io" target="_blank" style="color:var(--green2);font-weight:700">jsonbin.io</a> で無料アカウントを作成<br>
-      ② ログイン後「+ Create Bin」→ 以下のJSONを貼り付けて保存<br>
-      <code style="font-size:11px;background:rgba(0,0,0,.06);padding:2px 6px;border-radius:3px">{"staffList":[],"records":[],"adminPW":"admin1234"}</code><br>
-      ③ 作成されたBIN IDをコピー<br>
-      ④ 右上メニュー「API Keys」→ Master Keyをコピー
-    </div>
-    <div class="login-field">
-      <label>BIN ID</label>
-      <input type="text" id="setup-bin-id" placeholder="68xxxxxxxxxxxxxxxxxx">
-    </div>
-    <div class="login-field">
-      <label>Master API Key</label>
-      <input type="text" id="setup-api-key" placeholder="$2a$10$...">
-    </div>
-    <div class="login-err" id="setup-err" style="display:none"></div>
-    <button class="login-btn" onclick="saveSetup()" style="margin-bottom:10px">接続して保存</button>
-    <button onclick="skipSetup()" style="width:100%;padding:10px;border:1.5px solid var(--border);border-radius:var(--r-sm);background:transparent;color:var(--ink3);font-size:13px;cursor:pointer;font-family:inherit">
-      スキップ（このブラウザのみで使用）
-    </button>
-  </div>
-</div>
-
 <!-- ══ LOGIN ══ -->
 <div class="login-screen" id="login-screen">
   <div class="login-box">
@@ -399,10 +368,9 @@ h3{font-size:12px;font-weight:700;color:var(--ink2);margin-bottom:.75rem;text-tr
 
         <h2 style="margin-top:1.5rem">データ管理</h2>
         <div class="card">
-          <div id="cloud-status" style="font-size:13px;margin-bottom:12px;padding:8px 12px;background:var(--paper);border-radius:var(--r-sm)">🔄 確認中...</div>
+          <div id="cloud-status" style="font-size:13px;margin-bottom:12px;padding:8px 12px;background:var(--paper);border-radius:var(--r-sm)">🔄 クラウド確認中...</div>
           <div class="row">
             <button class="btn btn-outline" onclick="exportJSON()" style="font-size:12px">📦 JSONバックアップ</button>
-            <button class="btn btn-amber" onclick="showSetupFromSettings()" style="font-size:12px">🔧 クラウド再設定</button>
             <button class="btn btn-ghost" onclick="clearAll()" style="font-size:12px">🗑 全データ削除</button>
           </div>
         </div>
@@ -483,11 +451,9 @@ const isHol=d=>!!getHolName(d);
 const DOW=['日','月','火','水','木','金','土'];
 const MN=['1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月'];
 
-/* ══ クラウド設定 (JSONBin.io) ══
-   管理者が初回に設定。以後は全端末でURLを開くだけで共有される。
-   BIN_ID と API_KEY は jsonbin.io で無料取得。
-══════════════════════════════════ */
-const JSONBIN_BASE = 'https://api.jsonbin.io/v3/b';
+const FIXED_BIN_ID  = '6a0968dac0954111d8366777';
+const FIXED_API_KEY = '$2a$10$8iUUKmoJWOo8FwWiQ0QK.OFb0XPgnWOf1WQcvV5pZSxsiYUC1b3UG';
+const JSONBIN_BASE  = 'https://api.jsonbin.io/v3/b';
 
 let staffList = [];
 let records   = [];
@@ -498,15 +464,13 @@ let calM      = new Date().getMonth();
 let storeF    = 'all';
 let _mStaff   = null;
 let _syncTimer = null;
-let _lastEtag  = null; // 差分検知用
 
-/* ── クラウド設定の読み書き ── */
-function getCfg(){ try{ return JSON.parse(localStorage.getItem('jbCfg')||'null'); }catch(e){ return null; } }
-function saveCfg(c){ localStorage.setItem('jbCfg', JSON.stringify(c)); }
+function getCfg(){ return { binId: FIXED_BIN_ID, apiKey: FIXED_API_KEY }; }
+function saveCfg(c){}
 
 /* ── JSONBin からデータ取得 ── */
 async function cloudLoad(){
-  const cfg = getCfg(); if(!cfg) return false;
+  const cfg = getCfg();
   try{
     const r = await fetch(`${JSONBIN_BASE}/${cfg.binId}/latest`,{
       headers:{'X-Master-Key': cfg.apiKey, 'X-Bin-Meta': 'false'}
@@ -522,32 +486,24 @@ async function cloudLoad(){
 
 /* ── JSONBin へデータ保存 ── */
 async function cloudSave(){
-  const cfg = getCfg(); if(!cfg) return localSave();
+  const cfg = getCfg();
   try{
     await fetch(`${JSONBIN_BASE}/${cfg.binId}`,{
       method:'PUT',
       headers:{'Content-Type':'application/json','X-Master-Key': cfg.apiKey},
       body: JSON.stringify({staffList, records, adminPW})
     });
-  }catch(e){ console.error('cloudSave:',e); localSave(); }
+  }catch(e){ console.error('cloudSave:',e); }
 }
 
-/* フォールバック：ローカル保存 */
-function localSave(){
-  localStorage.setItem('sl3', JSON.stringify(staffList));
-  localStorage.setItem('rc3', JSON.stringify(records));
-  localStorage.setItem('aPW', adminPW);
-}
-
-/* persist = cloudSave のエイリアス（既存コードとの互換） */
 const persist = () => cloudSave();
 
-/* ── 定期ポーリング（30秒ごとに他端末の変更を取得） ── */
+/* ── 30秒ごとに他端末の変更を取得 ── */
 function startPolling(){
   clearInterval(_syncTimer);
   _syncTimer = setInterval(async ()=>{
-    const cfg = getCfg(); if(!cfg) return;
     try{
+      const cfg = getCfg();
       const r = await fetch(`${JSONBIN_BASE}/${cfg.binId}/latest`,{
         headers:{'X-Master-Key': cfg.apiKey,'X-Bin-Meta':'false'}
       });
@@ -562,58 +518,12 @@ function startPolling(){
   }, 30000);
 }
 
-/* ── 初回セットアップ画面の制御 ── */
-function showSetupScreen(){
-  document.getElementById('login-screen').style.display  = 'none';
-  document.getElementById('setup-screen').style.display  = 'flex';
-}
-async function saveSetup(){
-  const binId  = document.getElementById('setup-bin-id').value.trim();
-  const apiKey = document.getElementById('setup-api-key').value.trim();
-  const errEl  = document.getElementById('setup-err');
-  if(!binId || !apiKey){ errEl.textContent='BIN IDとAPI Keyを入力してください'; errEl.style.display='block'; return; }
-  const cfg = {binId, apiKey};
-  // 接続テスト
-  try{
-    const r = await fetch(`${JSONBIN_BASE}/${binId}/latest`,{
-      headers:{'X-Master-Key': apiKey, 'X-Bin-Meta':'false'}
-    });
-    if(!r.ok) throw new Error('接続失敗（'+r.status+'）\nBIN IDとAPI Keyを確認してください');
-    const data = await r.json();
-    staffList = data.staffList||[];
-    records   = data.records||[];
-    adminPW   = data.adminPW||'admin1234';
-    saveCfg(cfg);
-    document.getElementById('setup-screen').style.display = 'none';
-    document.getElementById('login-screen').style.display = 'flex';
-    buildStaffSel();
-    updateCloudStatus(true);
-    startPolling();
-  }catch(e){
-    errEl.textContent = '❌ '+e.message;
-    errEl.style.display = 'block';
-  }
-}
-function skipSetup(){
-  // ローカルモードで起動
-  staffList = JSON.parse(localStorage.getItem('sl3')||'[]');
-  records   = JSON.parse(localStorage.getItem('rc3')||'[]');
-  adminPW   = localStorage.getItem('aPW')||'admin1234';
-  document.getElementById('setup-screen').style.display = 'none';
-  document.getElementById('login-screen').style.display = 'flex';
-  buildStaffSel();
-  updateCloudStatus(false);
-}
 function updateCloudStatus(ok){
   const el = document.getElementById('cloud-status');
   if(!el) return;
   el.innerHTML = ok
     ? '🟢 <strong>クラウド同期中</strong> — 全端末でリアルタイム共有'
-    : '🟡 <strong>ローカルモード</strong> — このブラウザのみ保存';
-}
-function showSetupFromSettings(){
-  document.getElementById('app-shell').classList.remove('visible');
-  showSetupScreen();
+    : '🔴 <strong>接続失敗</strong> — ネットワークを確認してください';
 }
 
 /* ── HELPERS ── */
@@ -843,7 +753,6 @@ function addRecord(){
   alert(`✅ 記録しました\n${st.name}　${date}\n合計: ${fY(r.totalPay)}`);
 }
 function removeRecord(id){if(!confirm('削除しますか？'))return;records=records.filter(r=>r.id!==id);cloudSave();renderAll()}
-
 function renderRecent(){
   const el=document.getElementById('recent-list');const isA=me&&me.role==='admin';
   let list=[...records].sort((a,b)=>b.date.localeCompare(a.date));
@@ -1018,14 +927,11 @@ function addStaff(){
   if(!name||!wage){alert('名前と時給を入力してください');return;}
   if(staffList.find(s=>s.name===name)){alert('同じ名前のスタッフが存在します');return;}
   staffList.push({name,wage,store,id:Date.now()});
-  cloudSave();renderAll();
-  document.getElementById('st-name').value='';
-  document.getElementById('st-wage').value='1100';
+  cloudSave();renderAll();document.getElementById('st-name').value='';
 }
 function removeStaff(id){
   if(!confirm('削除しますか？（過去の記録は残ります）'))return;
-  staffList=staffList.filter(s=>s.id!==id);
-  cloudSave();renderAll();
+  staffList=staffList.filter(s=>s.id!==id);cloudSave();renderAll();
 }
 function renderStaffList(){
   const el=document.getElementById('staff-list');
@@ -1061,33 +967,25 @@ function clearAll(){
 
 function renderAll(){renderStaffList();renderStaffSelect();renderRecent();buildStaffSel()}
 
-/* ── INIT ── */
+/* ── INIT：BIN IDが埋め込まれているので設定画面不要 ── */
 document.getElementById('ci-date').value = new Date().toISOString().slice(0,10);
 
-// 祝日先読み
 (async()=>{
+  // 祝日先読み
   const y = new Date().getFullYear();
-  await Promise.all([String(y-1),String(y),String(y+1)].map(fetchHolidaysForYear));
-})();
+  Promise.all([String(y-1),String(y),String(y+1)].map(fetchHolidaysForYear));
 
-// クラウド設定チェック
-(async()=>{
-  const cfg = getCfg();
-  if(cfg){
-    const ok = await cloudLoad();
-    if(ok){
-      updateCloudStatus(true);
-      startPolling();
-      document.getElementById('setup-screen').style.display = 'none';
-      document.getElementById('login-screen').style.display = 'flex';
-      buildStaffSel();
-    } else {
-      showSetupScreen();
-    }
+  // クラウドから直接ロード
+  const ok = await cloudLoad();
+  if(ok){
+    updateCloudStatus(true);
+    startPolling();
+    buildStaffSel();
+    document.getElementById('login-screen').style.display = 'flex';
   } else {
-    // 初回 → セットアップ画面
-    document.getElementById('login-screen').style.display = 'none';
-    showSetupScreen();
+    updateCloudStatus(false);
+    alert('⚠️ クラウド接続に失敗しました。\nネットワーク接続を確認してください。');
+    document.getElementById('login-screen').style.display = 'flex';
   }
 })();
 </script>
