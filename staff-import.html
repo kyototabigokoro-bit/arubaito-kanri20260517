@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>スタッフ一括インポート</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Helvetica Neue',sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;background:#0F1612;padding:1rem}
+.box{background:#fff;border-radius:16px;padding:2rem;max-width:460px;width:100%}
+.logo{font-size:20px;font-weight:900;color:#1A7A56;margin-bottom:4px}
+.sub{font-size:13px;color:#7A8C81;margin-bottom:1.5rem}
+.field{display:flex;flex-direction:column;gap:5px;margin-bottom:1rem}
+.field label{font-size:11px;font-weight:700;letter-spacing:.06em;color:#3D4A42;text-transform:uppercase}
+.field input{padding:10px 12px;border:1.5px solid rgba(0,0,0,.12);border-radius:8px;font-size:13px;font-family:monospace;background:#F5F3EE;outline:none}
+.field input:focus{border-color:#1A7A56;background:#fff}
+.divider{border:none;border-top:1px solid #EAE8E2;margin:1.25rem 0}
+.staff-list{background:#F5F3EE;border-radius:10px;padding:.75rem;margin-bottom:1rem;max-height:220px;overflow-y:auto}
+.staff-item{display:flex;justify-content:space-between;align-items:center;padding:7px 4px;border-bottom:1px solid #EAE8E2;font-size:13px}
+.staff-item:last-child{border-bottom:none}
+.name{font-weight:700;color:#0F1612}
+.wage{font-weight:700;color:#1A7A56;font-family:monospace}
+.pill{font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px}
+.pill-k{background:#E0ECFB;color:#185FA5}
+.pill-r{background:#F8E8E8;color:#A02828}
+.btn{width:100%;padding:13px;border-radius:8px;border:none;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;transition:all .15s}
+.btn-go{background:#1A7A56;color:#fff;margin-bottom:8px}
+.btn-go:hover{background:#0F5038}
+.btn-go:disabled{background:#9FE1CB;cursor:not-allowed}
+.progress{height:5px;background:#EAE8E2;border-radius:3px;margin:10px 0;display:none}
+.progress-bar{height:100%;background:#1A7A56;border-radius:3px;width:0%;transition:width .3s}
+.result{padding:12px 14px;border-radius:8px;font-size:13px;display:none;line-height:1.7;margin-top:8px}
+.result.ok{background:#D4EDDF;color:#085041;border-left:3px solid #1A7A56}
+.result.err{background:#F8E8E8;color:#A02828;border-left:3px solid #A02828}
+.result.loading{background:#FBF0DC;color:#633806;border-left:3px solid #C87A1A}
+.hint{font-size:12px;color:#7A8C81;background:#F5F3EE;border-radius:8px;padding:10px 12px;margin-bottom:1rem;line-height:1.7}
+.hint strong{color:#0F1612}
+</style>
+</head>
+<body>
+<div class="box">
+  <div class="logo">スタッフ一括インポート</div>
+  <div class="sub">JSONBin に11名のスタッフデータを登録します</div>
+
+  <div class="hint">
+    <strong>JSONBin の情報を入力してください</strong><br>
+    アプリのクラウド設定で使用したものと同じ値です
+  </div>
+
+  <div class="field">
+    <label>BIN ID</label>
+    <input id="bin-id" type="text" placeholder="68xxxxxxxxxxxxxxxxxx" oninput="checkReady()">
+  </div>
+  <div class="field">
+    <label>Master API Key</label>
+    <input id="api-key" type="text" placeholder="$2a$10$..." oninput="checkReady()">
+  </div>
+
+  <div class="divider"></div>
+
+  <div class="staff-list" id="staff-list"></div>
+
+  <button class="btn btn-go" id="go-btn" onclick="doImport()" disabled>
+    ☁️ JSONBin にインポートする
+  </button>
+  <div class="progress" id="progress"><div class="progress-bar" id="bar"></div></div>
+  <div class="result" id="result"></div>
+</div>
+
+<script>
+const STAFF = [
+  {name:'篠崎　夏',   wage:1200, store:'木屋町御池個室店', id:1777521655234},
+  {name:'鈴木　優衣', wage:1150, store:'木屋町御池個室店', id:1777521670895},
+  {name:'柳田　美和', wage:1150, store:'木屋町御池個室店', id:1777521696630},
+  {name:'陳 毅龍',    wage:1130, store:'木屋町御池個室店', id:1777521835319},
+  {name:'小出　芽衣', wage:1150, store:'木屋町御池個室店', id:1777521851205},
+  {name:'寺林　里桜', wage:1150, store:'木屋町御池個室店', id:1777521873266},
+  {name:'木村　真緒', wage:1150, store:'烏丸三条個室店',   id:1777521887868},
+  {name:'渡部　璃久', wage:1150, store:'烏丸三条個室店',   id:1777521899319},
+  {name:'東谷　あみ', wage:1150, store:'烏丸三条個室店',   id:1777521909510},
+  {name:'河合　美空', wage:1150, store:'烏丸三条個室店',   id:1777522012809},
+  {name:'小又　麻莉紗',wage:1150,store:'烏丸三条個室店',   id:1777522069067},
+];
+
+// スタッフリスト表示
+const listEl = document.getElementById('staff-list');
+STAFF.forEach(s=>{
+  const isK = s.store==='木屋町御池個室店';
+  listEl.innerHTML += `<div class="staff-item">
+    <div>
+      <div class="name">${s.name}</div>
+      <div style="margin-top:2px"><span class="pill ${isK?'pill-k':'pill-r'}">${isK?'木屋町':'烏丸'}</span></div>
+    </div>
+    <div class="wage">¥${s.wage.toLocaleString()}/h</div>
+  </div>`;
+});
+
+function checkReady(){
+  const ok = document.getElementById('bin-id').value.trim() && document.getElementById('api-key').value.trim();
+  document.getElementById('go-btn').disabled = !ok;
+}
+
+async function doImport(){
+  const binId  = document.getElementById('bin-id').value.trim();
+  const apiKey = document.getElementById('api-key').value.trim();
+  const btn=document.getElementById('go-btn'), res=document.getElementById('result');
+  const prog=document.getElementById('progress'), bar=document.getElementById('bar');
+
+  btn.disabled=true; btn.textContent='処理中...';
+  prog.style.display='block'; bar.style.width='10%';
+  res.style.display='block'; res.className='result loading';
+  res.textContent='🔄 JSONBin に接続中...';
+
+  const BASE = 'https://api.jsonbin.io/v3/b';
+  const headers = {'X-Master-Key': apiKey, 'X-Bin-Meta':'false'};
+
+  try{
+    // 既存データ取得
+    const r = await fetch(`${BASE}/${binId}/latest`, {headers});
+    if(!r.ok) throw new Error(`接続エラー (${r.status})。BIN IDとAPI Keyを確認してください`);
+    const current = await r.json();
+    bar.style.width='40%';
+    res.textContent='📋 既存データを確認中...';
+
+    // 重複チェック（名前ベース）
+    const existNames = new Set((current.staffList||[]).map(s=>s.name));
+    const toAdd = STAFF.filter(s=>!existNames.has(s.name));
+    const merged = [...(current.staffList||[]), ...toAdd];
+
+    bar.style.width='70%';
+    res.textContent=`📝 ${toAdd.length}名を書き込み中...`;
+
+    // 書き込み
+    const w = await fetch(`${BASE}/${binId}`, {
+      method:'PUT',
+      headers:{...headers, 'Content-Type':'application/json'},
+      body: JSON.stringify({
+        staffList: merged,
+        records: current.records||[],
+        adminPW: current.adminPW||'admin1234'
+      })
+    });
+    if(!w.ok) throw new Error('書き込みエラー ('+w.status+')');
+
+    bar.style.width='100%';
+    res.className='result ok';
+    res.innerHTML=`✅ <strong>インポート完了！</strong><br>
+      追加: ${toAdd.length}名　スキップ（重複）: ${STAFF.length-toAdd.length}名<br>
+      合計登録数: ${merged.length}名<br><br>
+      アプリのURLを開くと全スタッフが表示されます。`;
+    btn.textContent='✅ 完了';
+
+  }catch(e){
+    bar.style.width='0%'; prog.style.display='none';
+    btn.disabled=false; btn.textContent='☁️ JSONBin にインポートする';
+    res.className='result err';
+    res.innerHTML=`❌ <strong>エラー</strong><br>${e.message}`;
+  }
+}
+</script>
+</body>
+</html>
