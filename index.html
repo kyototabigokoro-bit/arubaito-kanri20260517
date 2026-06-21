@@ -225,6 +225,24 @@ h3{font-size:12px;font-weight:700;color:var(--ink2);margin-bottom:.75rem;text-tr
   .content{padding:1rem}.cal-cell{min-height:60px}
   .topbar-right .store-pill{font-size:10px;padding:3px 7px}
 }
+/* ── 印刷用レイアウト ── */
+#print-overlay{display:none;position:fixed;inset:0;background:#fff;z-index:9999;overflow:auto}
+#print-overlay.open{display:block}
+.print-toolbar{position:sticky;top:0;background:var(--paper,#fafaf8);border-bottom:1px solid var(--line,#ddd);padding:12px 20px;display:flex;gap:10px;align-items:center;justify-content:space-between;z-index:2}
+#print-area{padding:24px;font-family:'DM Mono',monospace}
+.ptable{border-collapse:collapse;width:max-content;min-width:100%}
+.ptable th,.ptable td{border:1px solid #333;padding:4px 8px;font-size:11px;text-align:center;white-space:nowrap}
+.ptable th{background:#f0f0f0;font-weight:700}
+.ptable td.plabel{text-align:left;white-space:normal;min-width:150px;font-weight:700;background:#fafafa}
+.ptable td.ptotal{font-weight:700;background:#f6f6f6}
+.ptable td.pmanual{background:#fffef0}
+@media print{
+  body *{visibility:hidden}
+  #print-overlay, #print-overlay *{visibility:visible}
+  #print-overlay{position:absolute;top:0;left:0;width:100%}
+  .no-print{display:none !important}
+  @page{size:A4 landscape;margin:8mm}
+}
 </style>
 </head>
 <body>
@@ -284,7 +302,9 @@ h3{font-size:12px;font-weight:700;color:var(--ink2);margin-bottom:.75rem;text-tr
       <div class="topbar-right" id="store-filter-bar">
         <button class="store-pill all active" onclick="setFilter('all',this)">全店舗</button>
         <button class="store-pill kiyamachi" onclick="setFilter('木屋町御池個室店',this)">木屋町</button>
+        <button class="store-pill kiyamachi" onclick="setFilter('木屋町御池個室店ヘルプ',this)">木屋町ヘルプ</button>
         <button class="store-pill karasuma" onclick="setFilter('烏丸三条個室店',this)">烏丸</button>
+        <button class="store-pill karasuma" onclick="setFilter('烏丸三条個室店ヘルプ',this)">烏丸ヘルプ</button>
       </div>
     </div>
 
@@ -321,6 +341,7 @@ h3{font-size:12px;font-weight:700;color:var(--ink2);margin-bottom:.75rem;text-tr
       <div id="checkin" class="section">
         <h2>出退勤を記録する</h2>
         <div class="card">
+          <div class="member-row admin-only" id="ci-store-filter" style="margin-bottom:10px"></div>
           <div class="row" style="margin-bottom:12px">
             <div class="field"><label>スタッフ名</label><select id="ci-staff"></select></div>
             <div class="field"><label>日付</label><input type="date" id="ci-date"></div>
@@ -364,12 +385,31 @@ h3{font-size:12px;font-weight:700;color:var(--ink2);margin-bottom:.75rem;text-tr
       <div id="monthly" class="section">
         <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:1rem">
           <h2 style="margin-bottom:0">月次集計</h2>
-          <button class="btn btn-outline" onclick="exportCSV()" style="font-size:12px">📥 CSV出力</button>
         </div>
         <div class="row" style="margin-bottom:1rem">
           <div class="field" style="max-width:280px"><label>対象期間</label>
-            <select id="month-sel" onchange="renderMonthly()"></select>
+            <select id="month-sel" onchange="renderMonthly();renderMonthlySummary();"></select>
           </div>
+        </div>
+
+        <div class="card" style="overflow-x:auto">
+          <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:.75rem">
+            <h3 style="margin-bottom:0">全スタッフ集計（コピー＆ペースト／CSV出力用）</h3>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <button class="btn btn-outline" onclick="copyMonthlySummary()" style="font-size:12px">📋 スプレッドシートにコピー</button>
+              <button class="btn btn-outline" onclick="exportSummaryCSV()" style="font-size:12px">📥 CSV出力</button>
+              <button class="btn btn-primary" onclick="openPrintView()" style="font-size:12px">🖨 印刷用レイアウト</button>
+            </div>
+          </div>
+          <div id="monthly-summary"></div>
+          <div style="font-size:11px;color:var(--ink3);margin-top:8px;line-height:1.6">
+            ※ 所得税は国税庁「源泉徴収税額表（月額表・甲欄）」の電算機計算の特例に基づく概算値です（扶養親族等0人・配偶者控除なし・社会保険料控除なしを前提）。交通費は非課税のため課税対象から除いています。実際の納付額は顧問税理士等にご確認ください。
+          </div>
+        </div>
+
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-top:1.5rem">
+          <h3 style="margin-bottom:0">スタッフ別 日別明細</h3>
+          <button class="btn btn-outline" onclick="exportCSV()" style="font-size:12px">📥 日別明細CSV出力</button>
         </div>
         <div class="member-row" id="monthly-members"></div>
         <div id="monthly-content"></div>
@@ -391,8 +431,15 @@ h3{font-size:12px;font-weight:700;color:var(--ink2);margin-bottom:.75rem;text-tr
           <div class="row">
             <div class="field"><label>スタッフ名</label><input type="text" id="st-name" placeholder="例：田中花子"></div>
             <div class="field"><label>基本時給（円）</label><input type="number" id="st-wage" value="1100" min="900"></div>
+            <div class="field"><label>月額手当（円）</label><input type="number" id="st-allowance" value="0" min="0" step="100"></div>
+            <div class="field"><label>性別</label><select id="st-gender"><option>女</option><option>男</option><option>その他</option></select></div>
             <div class="field"><label>所属店舗</label>
-              <select id="st-store"><option>木屋町御池個室店</option><option>烏丸三条個室店</option></select>
+              <select id="st-store">
+                <option>木屋町御池個室店</option>
+                <option>木屋町御池個室店ヘルプ</option>
+                <option>烏丸三条個室店</option>
+                <option>烏丸三条個室店ヘルプ</option>
+              </select>
             </div>
             <button class="btn btn-primary" onclick="addStaff()" style="margin-top:18px">追加</button>
           </div>
@@ -414,6 +461,27 @@ h3{font-size:12px;font-weight:700;color:var(--ink2);margin-bottom:.75rem;text-tr
           <div class="list-item"><span>深夜手当（22:00以降）</span><span class="mono" style="color:var(--purple);font-weight:700">×1.25</span></div>
           <div class="list-item"><span>交通費</span><span class="mono" style="color:var(--green);font-weight:700">500円/日</span></div>
           <div class="list-item"><span>締め日</span><span class="mono" style="font-weight:700">毎月21日〜翌20日</span></div>
+          <div class="list-item"><span>月額手当</span><span class="mono" style="font-weight:700">スタッフ設定で個別指定（課税対象）</span></div>
+          <div class="list-item"><span>所得税（源泉徴収）</span><span class="mono" style="font-weight:700">月額表・甲欄の概算自動計算（扶養0人前提）</span></div>
+        </div>
+
+        <h2 style="margin-top:1.5rem">繁忙期設定</h2>
+        <div class="card">
+          <div style="font-size:12px;color:var(--ink3);margin-bottom:12px;line-height:1.6">設定した期間（月日のみ・毎年自動適用／年またぎ可）に含まれる勤務は、既存の出退勤記録から自動集計され、通常の労働時間と重複してカウントされます。割増分のみ別途加算されます。</div>
+          <div class="row" style="margin-bottom:12px">
+            <div class="field"><label>開始日（MM-DD）</label><input type="text" id="busy-start" placeholder="12-21" maxlength="5"></div>
+            <div class="field"><label>終了日（MM-DD）</label><input type="text" id="busy-end" placeholder="01-05" maxlength="5"></div>
+          </div>
+          <div class="row" style="margin-bottom:12px">
+            <div class="field"><label>割増方式</label>
+              <select id="busy-rate-type">
+                <option value="fixed">固定額（円/時）</option>
+                <option value="percent">時給に対する割合（%）</option>
+              </select>
+            </div>
+            <div class="field"><label>割増値</label><input type="number" id="busy-rate-value" min="0" step="1"></div>
+          </div>
+          <button class="btn btn-primary" onclick="saveBusySettings()">繁忙期設定を保存</button>
         </div>
 
         <h2 style="margin-top:1.5rem">データ管理</h2>
@@ -440,13 +508,55 @@ h3{font-size:12px;font-weight:700;color:var(--ink2);margin-bottom:.75rem;text-tr
     </div>
     <div class="row" style="margin-bottom:4px">
       <div class="field"><label>基本時給（円）</label><input type="number" id="edit-wage" min="900"></div>
+      <div class="field"><label>月額手当（円）</label><input type="number" id="edit-allowance" min="0" step="100"></div>
+      <div class="field"><label>性別</label><select id="edit-gender"><option>女</option><option>男</option><option>その他</option></select></div>
       <div class="field"><label>所属店舗</label>
-        <select id="edit-store"><option>木屋町御池個室店</option><option>烏丸三条個室店</option></select>
+        <select id="edit-store">
+          <option>木屋町御池個室店</option>
+          <option>木屋町御池個室店ヘルプ</option>
+          <option>烏丸三条個室店</option>
+          <option>烏丸三条個室店ヘルプ</option>
+        </select>
       </div>
     </div>
     <div class="modal-actions">
       <button class="btn btn-outline" onclick="closeModal()">キャンセル</button>
       <button class="btn btn-primary" onclick="saveEdit()">保存する</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ 印刷用レイアウト ══ -->
+<div id="print-overlay">
+  <div class="print-toolbar no-print">
+    <div style="font-weight:700">🖨 印刷用レイアウト（月次労働時間集計）</div>
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-outline" onclick="closePrintView()">閉じる</button>
+      <button class="btn btn-primary" onclick="window.print()">印刷する（PDF保存も可）</button>
+    </div>
+  </div>
+  <div id="print-area"></div>
+</div>
+
+<!-- ══ 勤怠記録 編集モーダル ══ -->
+<div class="modal-overlay" id="record-edit-modal">
+  <div class="modal">
+    <div class="modal-title">📝 勤怠記録を編集</div>
+    <input type="hidden" id="redit-id">
+    <div class="row" style="margin-bottom:12px">
+      <div class="field"><label>スタッフ</label><select id="redit-staff"></select></div>
+      <div class="field"><label>日付</label><input type="date" id="redit-date"></div>
+    </div>
+    <div class="row" style="margin-bottom:12px">
+      <div class="field"><label>出勤</label><input type="time" id="redit-in" step="900"></div>
+      <div class="field"><label>退勤</label><input type="time" id="redit-out" step="900"></div>
+      <div class="field"><label>交通費</label>
+        <select id="redit-transport"><option value="500">あり（500円）</option><option value="0">なし</option></select>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-outline" onclick="closeRecordEditModal()">キャンセル</button>
+      <button class="btn btn-primary" onclick="saveRecordEdit()">保存する</button>
     </div>
   </div>
 </div>
@@ -508,6 +618,7 @@ const JSONBIN_BASE  = 'https://api.jsonbin.io/v3/b';
 let staffList = [];
 let records   = [];
 let adminPW   = 'admin1234';
+let appSettings = {busyStart:'12-21', busyEnd:'01-05', busyRateType:'fixed', busyRateValue:0};
 let me        = null;
 let calY      = new Date().getFullYear();
 let calM      = new Date().getMonth();
@@ -530,6 +641,7 @@ async function cloudLoad(){
     staffList = data.staffList || [];
     records   = data.records   || [];
     adminPW   = data.adminPW   || 'admin1234';
+    appSettings = Object.assign({busyStart:'12-21',busyEnd:'01-05',busyRateType:'fixed',busyRateValue:0}, data.appSettings||{});
     return true;
   }catch(e){ console.error('cloudLoad:',e); return false; }
 }
@@ -541,7 +653,7 @@ async function cloudSave(){
     await fetch(`${JSONBIN_BASE}/${cfg.binId}`,{
       method:'PUT',
       headers:{'Content-Type':'application/json','X-Master-Key': cfg.apiKey},
-      body: JSON.stringify({staffList, records, adminPW})
+      body: JSON.stringify({staffList, records, adminPW, appSettings})
     });
   }catch(e){ console.error('cloudSave:',e); }
 }
@@ -562,6 +674,7 @@ function startPolling(){
       staffList = data.staffList||[];
       records   = data.records||[];
       adminPW   = data.adminPW||'admin1234';
+      appSettings = Object.assign({busyStart:'12-21',busyEnd:'01-05',busyRateType:'fixed',busyRateValue:0}, data.appSettings||{});
       renderAll();
       if(document.getElementById('calendar')?.classList.contains('active')) renderCal();
     }catch(e){}
@@ -611,10 +724,74 @@ function calcPay(date,inT,outT,wage,transport){
     totalHours:Math.round((o-i)/60*100)/100,nMins:nM,nightMins:ntM,
     sp,ew,nHours:nM/60,nightHours:ntM/60};
 }
+/* ── 繁忙期（期間は管理画面で可変設定／毎年自動適用・年またぎ対応） ── */
+function isBusySeason(dateStr){
+  const{busyStart,busyEnd}=appSettings;
+  if(!busyStart||!busyEnd)return false;
+  const d=new Date(dateStr);
+  const cur=(d.getMonth()+1)*100+d.getDate();
+  const[sm,sd]=busyStart.split('-').map(Number),[em,ed]=busyEnd.split('-').map(Number);
+  const start=sm*100+sd,end=em*100+ed;
+  return start<=end?(cur>=start&&cur<=end):(cur>=start||cur<=end);
+}
+function busyRateLabel(){
+  return appSettings.busyRateType==='percent'?`+${appSettings.busyRateValue}%`:`+¥${appSettings.busyRateValue}/h`;
+}
+function calcBusyPremium(hours,wage){
+  if(appSettings.busyRateType==='percent')return Math.round(hours*wage*(appSettings.busyRateValue/100));
+  return Math.round(hours*appSettings.busyRateValue);
+}
+
 function pKey(d){const x=new Date(d);let y=x.getFullYear(),m=x.getMonth();if(x.getDate()<=20){m--;if(m<0){m=11;y--;}}return`${y}-${String(m+1).padStart(2,'0')}`}
 function pLabel(k){const[y,m]=k.split('-').map(Number);let ny=y,nm=m+1;if(nm>12){nm=1;ny++;}return`${y}年${m}月21日〜${ny}年${nm}月20日`}
 const fStaff=()=>storeF==='all'?staffList:staffList.filter(s=>s.store===storeF);
 const fRecs=()=>{if(storeF==='all')return records;const ids=new Set(fStaff().map(s=>s.id));return records.filter(r=>ids.has(r.staffId))};
+
+/* ── 店舗区分（本店＋ヘルプ） ── */
+const STORE_OPTIONS=['木屋町御池個室店','木屋町御池個室店ヘルプ','烏丸三条個室店','烏丸三条個室店ヘルプ'];
+function storeShort(store){
+  if(store==='木屋町御池個室店')return '木屋町';
+  if(store==='木屋町御池個室店ヘルプ')return '木屋町ヘルプ';
+  if(store==='烏丸三条個室店')return '烏丸';
+  if(store==='烏丸三条個室店ヘルプ')return '烏丸ヘルプ';
+  return store||'';
+}
+function storeColorClass(store){return(store||'').startsWith('木屋町')?'store-k':'store-r';}
+function activeStores(){
+  const present=new Set(staffList.map(s=>s.store));
+  return STORE_OPTIONS.filter(s=>present.has(s));
+}
+
+/* ── 所得税（源泉徴収）── 国税庁「月額表の甲欄を適用する給与等に対する税額の電算機計算の特例」
+   令和8年分以降の算式に基づく簡易計算。前提：甲欄／扶養親族等の数＝0人／配偶者なし／社会保険料控除なし
+   A = 課税対象となるその月の給与等の金額（交通費等の非課税通勤手当を除く） */
+function calcIncomeTax(A){
+  if(A<=0)return 0;
+  let kyuyoKoujo;
+  if(A<=158333)kyuyoKoujo=54167;
+  else if(A<=299999)kyuyoKoujo=A*0.30+6667;
+  else if(A<=549999)kyuyoKoujo=A*0.20+36667;
+  else if(A<=708330)kyuyoKoujo=A*0.10+91667;
+  else kyuyoKoujo=162500;
+  kyuyoKoujo=Math.ceil(kyuyoKoujo);
+  let kisoKoujo;
+  if(A<=2120833)kisoKoujo=48334;
+  else if(A<=2162499)kisoKoujo=40000;
+  else if(A<=2204166)kisoKoujo=26667;
+  else if(A<=2245833)kisoKoujo=13334;
+  else kisoKoujo=0;
+  const B=Math.max(0,A-kyuyoKoujo-kisoKoujo);
+  let tax;
+  if(B<=162500)tax=B*0.05105;
+  else if(B<=275000)tax=B*0.10210-8296;
+  else if(B<=579166)tax=B*0.20420-36374;
+  else if(B<=750000)tax=B*0.23483-54113;
+  else if(B<=1500000)tax=B*0.33693-130688;
+  else if(B<=3333333)tax=B*0.40840-237893;
+  else tax=B*0.45945-408061;
+  tax=Math.max(0,tax);
+  return Math.round(tax/10)*10;
+}
 
 /* ── LOGIN ── */
 function switchTab(tab,btn){
@@ -625,7 +802,7 @@ function switchTab(tab,btn){
 }
 function buildStaffSel(){
   const sel=document.getElementById('staff-sel');
-  sel.innerHTML=staffList.length?staffList.map(s=>`<option value="${s.id}">${s.name}（${s.store==='木屋町御池個室店'?'木屋町':'烏丸'}）</option>`).join(''):'<option value="">（スタッフが登録されていません）</option>';
+  sel.innerHTML=staffList.length?staffList.map(s=>`<option value="${s.id}">${s.name}（${storeShort(s.store)}）</option>`).join(''):'<option value="">（スタッフが登録されていません）</option>';
 }
 function loginStaff(){
   const sid=parseInt(document.getElementById('staff-sel').value);
@@ -679,15 +856,16 @@ function showSection(name,el){
   const T={calendar:'📅 カレンダー',checkin:'⏱ 出退勤入力',monthly:'📊 月次集計',annual:'📈 年次レポート',settings:'⚙️ 設定・スタッフ'};
   document.getElementById('page-title').textContent=T[name]||name;
   if(name==='calendar')renderCal();
-  if(name==='monthly'){buildMOpts();renderMonthly();}
+  if(name==='monthly'){buildMOpts();renderMonthly();renderMonthlySummary();}
   if(name==='annual')renderAnnual();
+  if(name==='settings')fillBusySettingsForm();
   if(window.innerWidth<=720)toggleSidebar();
 }
 function toggleSidebar(){document.getElementById('sidebar').classList.toggle('open');document.getElementById('mob-overlay').classList.toggle('show')}
 function setFilter(v,btn){
   storeF=v;document.querySelectorAll('.store-pill').forEach(p=>p.classList.remove('active'));btn.classList.add('active');
   const cur=document.querySelector('.section.active');
-  if(cur.id==='calendar')renderCal();if(cur.id==='monthly')renderMonthly();if(cur.id==='annual')renderAnnual();
+  if(cur.id==='calendar')renderCal();if(cur.id==='monthly'){renderMonthly();renderMonthlySummary();}if(cur.id==='annual')renderAnnual();
 }
 
 /* ── CALENDAR ── */
@@ -733,7 +911,7 @@ function renderCal(){
     if(dr.length){
       const chips=document.createElement('div');chips.className='cal-staff-chips';
       dr.slice(0,3).forEach(r=>{const st=staffList.find(s=>s.id===r.staffId);if(!st)return;
-        const c=document.createElement('div');c.className='cal-chip '+(st.store==='木屋町御池個室店'?'store-k':'store-r');
+        const c=document.createElement('div');c.className='cal-chip '+storeColorClass(st.store);
         c.textContent=`${st.name.split(/\s/)[0]} ${fY(r.totalPay)}`;chips.appendChild(c);
       });
       if(dr.length>3){const m=document.createElement('div');m.className='cal-more';m.textContent=`+${dr.length-3}人`;chips.appendChild(m);}
@@ -757,17 +935,21 @@ function openDayPanel(ds,recs){
   </div>`;
   recs.forEach(r=>{
     const st=staffList.find(s=>s.id===r.staffId);if(!st)return;
-    const sc=st.store==='木屋町御池個室店'?'store-k':'store-r',tags=[];
+    const sc=storeColorClass(st.store),tags=[];
     if(r.sp)tags.push('<span class="badge b-warn">割増+50円</span>');
     if(r.nightMins>0)tags.push(`<span class="badge b-night">深夜${Math.round(r.nightMins)}分</span>`);
     if(r.transport>0)tags.push('<span class="badge b-bus">交通費</span>');
+    const isA=me&&me.role==='admin';
     html+=`<div class="day-staff-row">
       <div>
-        <div class="day-staff-name"><span class="cal-chip ${sc}" style="margin-right:6px;font-size:10px">${st.store==='木屋町御池個室店'?'木屋町':'烏丸'}</span>${st.name}</div>
+        <div class="day-staff-name"><span class="cal-chip ${sc}" style="margin-right:6px;font-size:10px">${storeShort(st.store)}</span>${st.name}</div>
         <div style="font-size:12px;color:var(--ink3);font-family:'DM Mono',monospace">${r.inT}→${r.outT}（${fH(r.totalHours)}）時給¥${st.wage.toLocaleString()}${r.sp?'+50':''}</div>
         <div class="tag-row">${tags.join('')}</div>
       </div>
-      <div class="day-pay">${fY(r.totalPay)}</div>
+      <div style="text-align:right">
+        <div class="day-pay">${fY(r.totalPay)}</div>
+        ${isA?`<button class="btn btn-amber" style="padding:3px 8px;font-size:11px;margin-top:4px" onclick="openRecordEditModal(${r.id})">✏️ 編集</button>`:''}
+      </div>
     </div>`;
   });
   body.innerHTML=html;panel.classList.add('open');panel.scrollIntoView({behavior:'smooth',block:'nearest'});
@@ -893,14 +1075,14 @@ function renderRecent(){
   if(!list.length){el.innerHTML='<div class="empty">まだ記録がありません</div>';return;}
   el.innerHTML=list.map(r=>{
     const st=staffList.find(s=>s.id===r.staffId);
-    const sc=st?.store==='木屋町御池個室店'?'store-k':'store-r',tags=[];
+    const sc=storeColorClass(st?.store),tags=[];
     if(r.sp)tags.push('<span class="badge b-warn">割増</span>');
     if(r.nightMins>0)tags.push('<span class="badge b-night">深夜</span>');
     if(r.transport>0)tags.push('<span class="badge b-bus">交通費</span>');
     return `<div class="list-item">
       <div>
         <div style="font-weight:700;display:flex;align-items:center;gap:6px">
-          <span class="cal-chip ${sc}" style="font-size:9px">${st?.store==='木屋町御池個室店'?'木屋町':'烏丸'}</span>
+          <span class="cal-chip ${sc}" style="font-size:9px">${st?storeShort(st.store):''}</span>
           ${st?st.name:'不明'}<span style="font-weight:400;color:var(--ink3);font-size:12px">${r.date}（${DOW[new Date(r.date).getDay()]}）</span>
         </div>
         <div style="font-size:12px;color:var(--ink3);font-family:'DM Mono',monospace">${r.inT}→${r.outT}（${fH(r.totalHours)}）</div>
@@ -964,11 +1146,182 @@ function renderMonthly(){
   <div class="card"><h3>日別明細</h3>
     ${recs.length?recs.map(r=>{
       const tags=[];if(r.sp)tags.push('<span class="badge b-warn">割増</span>');if(r.nightMins>0)tags.push('<span class="badge b-night">深夜</span>');if(r.transport>0)tags.push('<span class="badge b-bus">交通費</span>');
-      return`<div class="list-item"><div><div style="font-weight:700">${r.date}（${DOW[new Date(r.date).getDay()]}）</div><div style="font-size:12px;color:var(--ink3);font-family:'DM Mono',monospace">${r.inT}→${r.outT}（${fH(r.totalHours)}）時給¥${r.ew.toLocaleString()}</div><div class="tag-row">${tags.join('')}</div></div><div style="font-weight:900;color:var(--green);font-family:'DM Mono',monospace">${fY(r.totalPay)}</div></div>`;
+      return`<div class="list-item"><div><div style="font-weight:700">${r.date}（${DOW[new Date(r.date).getDay()]}）</div><div style="font-size:12px;color:var(--ink3);font-family:'DM Mono',monospace">${r.inT}→${r.outT}（${fH(r.totalHours)}）時給¥${r.ew.toLocaleString()}</div><div class="tag-row">${tags.join('')}</div></div><div style="text-align:right"><div style="font-weight:900;color:var(--green);font-family:'DM Mono',monospace">${fY(r.totalPay)}</div><button class="btn btn-amber" style="padding:3px 8px;font-size:11px;margin-top:4px" onclick="openRecordEditModal(${r.id})">✏️ 編集</button></div></div>`;
     }).join(''):'<div class="empty">この期間の記録がありません</div>'}
   </div>`;
 }
 function selMStaff(id){_mStaff=id;renderMonthly()}
+
+/* ── 全スタッフ月次集計（コピー＆CSV用） ── */
+function buildMonthlySummaryRows(key){
+  const sl=fStaff();
+  const header=['スタッフ名','店舗','出勤日数','平日労働時間(h)','割増日労働時間(h)','繁忙期時間(h)','深夜手当(円)','交通費(円)','各種手当(円)','繁忙期手当(円)','支給合計(円)','所得税(円)','差引支給額(円)'];
+  const dataRows=sl.map(st=>{
+    const recs=records.filter(r=>r.staffId===st.id&&pKey(r.date)===key);
+    const days=recs.length;
+    const wdH=recs.filter(r=>!r.sp).reduce((s,r)=>s+r.nHours+r.nightHours,0);
+    const spH=recs.filter(r=>r.sp).reduce((s,r)=>s+r.nHours+r.nightHours,0);
+    const busyH=recs.filter(r=>isBusySeason(r.date)).reduce((s,r)=>s+r.nHours+r.nightHours,0); // 通常労働時間と重複集計
+    const busyPremium=calcBusyPremium(busyH,st.wage);
+    const ntP=recs.reduce((s,r)=>s+Math.round(r.nightHours*(r.ew||st.wage)*0.25),0);
+    const tT=recs.reduce((s,r)=>s+(r.transport||0),0);
+    const payTotal=recs.reduce((s,r)=>s+r.totalPay,0); // 労働分＋交通費
+    const allowance=st.allowance||0;
+    const laborPay=payTotal-tT; // 交通費を除いた労働対価
+    const grossPay=laborPay+tT+allowance+busyPremium; // 支給合計（交通費・手当・繁忙期手当込み）
+    const taxableBase=laborPay+allowance+busyPremium; // 課税対象（非課税の交通費は除く）
+    const tax=calcIncomeTax(taxableBase);
+    const netPay=grossPay-tax;
+    return{row:[st.name,st.store,days,Math.round(wdH*10)/10,Math.round(spH*10)/10,Math.round(busyH*10)/10,ntP,tT,allowance,busyPremium,grossPay,tax,netPay],
+      raw:{days,wdH,spH,busyH,ntP,tT,allowance,busyPremium,grossPay,tax,netPay}};
+  });
+  return{header,rows:dataRows.map(d=>d.row)};
+}
+function renderMonthlySummary(){
+  const key=document.getElementById('month-sel')?.value;
+  const cont=document.getElementById('monthly-summary');if(!cont)return;
+  if(!key){cont.innerHTML='<div class="empty">対象期間を選択してください</div>';return;}
+  const{header,rows}=buildMonthlySummaryRows(key);
+  if(!rows.length){cont.innerHTML='<div class="empty">スタッフが登録されていません</div>';return;}
+  let html=`<table class="annual-table"><thead><tr>${header.map(h=>`<th>${h}</th>`).join('')}</tr></thead><tbody>`;
+  rows.forEach(r=>{
+    html+=`<tr><td>${r[0]}</td><td>${r[1]}</td><td>${r[2]}日</td><td>${fH(r[3])}</td><td>${fH(r[4])}</td><td>${fH(r[5])}</td><td>${fY(r[6])}</td><td>${fY(r[7])}</td><td>${fY(r[8])}</td><td>${fY(r[9])}</td><td>${fY(r[10])}</td><td style="color:var(--red)">${fY(r[11])}</td><td style="color:var(--green);font-weight:700">${fY(r[12])}</td></tr>`;
+  });
+  const tot=[2,3,4,5,6,7,8,9,10,11,12].map(i=>rows.reduce((s,r)=>s+r[i],0));
+  html+=`<tr class="total-row"><td>合計</td><td></td><td>${tot[0]}日</td><td>${fH(tot[1])}</td><td>${fH(tot[2])}</td><td>${fH(tot[3])}</td><td>${fY(tot[4])}</td><td>${fY(tot[5])}</td><td>${fY(tot[6])}</td><td>${fY(tot[7])}</td><td>${fY(tot[8])}</td><td>${fY(tot[9])}</td><td>${fY(tot[10])}</td></tr>`;
+  html+='</tbody></table>';
+  cont.innerHTML=html;
+}
+function copyMonthlySummary(){
+  const key=document.getElementById('month-sel')?.value;if(!key){alert('対象期間を選択してください');return;}
+  const{header,rows}=buildMonthlySummaryRows(key);
+  const tsv=[header,...rows].map(r=>r.join('\t')).join('\n');
+  if(navigator.clipboard&&navigator.clipboard.writeText){
+    navigator.clipboard.writeText(tsv).then(()=>alert('✅ コピーしました。スプレッドシートのセルを選択して貼り付けてください。')).catch(()=>fallbackCopy(tsv));
+  }else{fallbackCopy(tsv);}
+}
+function fallbackCopy(text){
+  const ta=document.createElement('textarea');ta.value=text;ta.style.position='fixed';ta.style.opacity='0';
+  document.body.appendChild(ta);ta.select();
+  try{document.execCommand('copy');alert('✅ コピーしました。スプレッドシートのセルを選択して貼り付けてください。');}
+  catch(e){alert('コピーに失敗しました。CSV出力をご利用ください。');}
+  document.body.removeChild(ta);
+}
+function exportSummaryCSV(){
+  const key=document.getElementById('month-sel')?.value;if(!key){alert('対象期間を選択してください');return;}
+  const{header,rows}=buildMonthlySummaryRows(key);
+  dlCSV([header,...rows],`月次集計_${pLabel(key).replace(/\s/g,'')}.csv`);
+}
+
+/* ── 印刷用レイアウト（スタッフ＝列、項目＝行） ── */
+function buildPrintStats(key,store){
+  return staffList.filter(s=>s.store===store).map(st=>{
+    const recs=records.filter(r=>r.staffId===st.id&&pKey(r.date)===key);
+    const wdRecs=recs.filter(r=>!r.sp),spRecs=recs.filter(r=>r.sp);
+    const wdH=wdRecs.reduce((s,r)=>s+r.nHours+r.nightHours,0);
+    const spH=spRecs.reduce((s,r)=>s+r.nHours+r.nightHours,0);
+    const wdPay=wdRecs.reduce((s,r)=>s+(r.nHours+r.nightHours)*(r.ew||st.wage),0);
+    const spPay=spRecs.reduce((s,r)=>s+(r.nHours+r.nightHours)*(r.ew||st.wage),0);
+    const ntH=recs.reduce((s,r)=>s+r.nightHours,0);
+    const ntP=recs.reduce((s,r)=>s+Math.round(r.nightHours*(r.ew||st.wage)*0.25),0);
+    const tT=recs.reduce((s,r)=>s+(r.transport||0),0);
+    const busyH=recs.filter(r=>isBusySeason(r.date)).reduce((s,r)=>s+r.nHours+r.nightHours,0);
+    const busyPremium=calcBusyPremium(busyH,st.wage);
+    const allowance=st.allowance||0;
+    const taxBase=wdPay+spPay+ntP+allowance+busyPremium;
+    const tax=calcIncomeTax(taxBase);
+    const total=wdPay+spPay+ntP+tT+allowance+busyPremium-tax;
+    return{st,days:recs.length,wdH,spH,wdPay,spPay,ntH,ntP,tT,busyH,busyPremium,allowance,tax,total};
+  });
+}
+function buildPrintTable(key){
+  const stores=activeStores();
+  if(!stores.length)return '<div class="empty">スタッフが登録されていません</div>';
+  const groups=stores.map(store=>({store,stats:buildPrintStats(key,store)})).filter(g=>g.stats.length);
+  if(!groups.length)return '<div class="empty">この期間の記録がありません</div>';
+  const n2=v=>Math.round(v*100)/100;
+  const rowDefs=[
+    {label:'性別',val:s=>s.st.gender||'',sum:()=>''},
+    {label:'労働日数',val:s=>s.days,sum:arr=>arr.reduce((a,s)=>a+s.days,0)},
+    {label:'労働時間数(h)平日',val:s=>n2(s.wdH),sum:arr=>n2(arr.reduce((a,s)=>a+s.wdH,0))},
+    {label:'労働時間数(h)金、土曜日、祝前日',val:s=>n2(s.spH),sum:arr=>n2(arr.reduce((a,s)=>a+s.spH,0))},
+    {label:'時給',val:s=>s.st.wage,sum:()=>''},
+    {label:'',spacer:true},
+    {label:'深夜労働時間数',val:s=>n2(s.ntH),sum:arr=>n2(arr.reduce((a,s)=>a+s.ntH,0))},
+    {label:'調理手当',val:s=>s.allowance,sum:arr=>arr.reduce((a,s)=>a+s.allowance,0)},
+    {label:`繁忙期時間数 ${appSettings.busyStart}〜${appSettings.busyEnd}`,val:s=>n2(s.busyH),sum:arr=>n2(arr.reduce((a,s)=>a+s.busyH,0))},
+    {label:`繁忙期手当（${busyRateLabel()}）`,val:s=>s.busyPremium,sum:arr=>arr.reduce((a,s)=>a+s.busyPremium,0)},
+    {label:'デザイン料',val:()=>'',sum:()=>0,manual:true},
+    {label:'時間給平日',val:s=>Math.round(s.wdPay),sum:arr=>Math.round(arr.reduce((a,s)=>a+s.wdPay,0))},
+    {label:'時間給金、土曜日、祝前日',val:s=>Math.round(s.spPay),sum:arr=>Math.round(arr.reduce((a,s)=>a+s.spPay,0))},
+    {label:'通勤費（1日最大500円）',val:s=>s.tT,sum:arr=>arr.reduce((a,s)=>a+s.tT,0)},
+    {label:'深夜労働時間給',val:s=>s.ntP,sum:arr=>arr.reduce((a,s)=>a+s.ntP,0)},
+    {label:'所得税',val:s=>s.tax,sum:arr=>arr.reduce((a,s)=>a+s.tax,0)},
+    {label:'所得税（手動調整）',val:()=>'',sum:()=>0,manual:true},
+    {label:'合計',val:s=>Math.round(s.total),sum:arr=>Math.round(arr.reduce((a,s)=>a+s.total,0)),bold:true},
+  ];
+  let html=`<table class="ptable"><thead>
+    <tr><th class="plabel" style="text-align:left">起算日<br>${pLabel(key)}</th>${groups.map(g=>`<th colspan="${g.stats.length+1}">${g.store}</th>`).join('')}</tr>
+    <tr><th class="plabel"></th>${groups.map(g=>g.stats.map(s=>`<th>${s.st.name}</th>`).join('')+'<th>合計</th>').join('')}</tr>
+  </thead><tbody>`;
+  rowDefs.forEach(rd=>{
+    if(rd.spacer){html+=`<tr><td class="plabel">&nbsp;</td>${groups.map(g=>`<td colspan="${g.stats.length+1}">&nbsp;</td>`).join('')}</tr>`;return;}
+    html+=`<tr><td class="plabel"${rd.bold?' style="font-weight:900"':''}>${rd.label}</td>`;
+    groups.forEach(g=>{
+      g.stats.forEach(s=>{
+        const v=rd.val(s);
+        html+=`<td${rd.manual?' class="pmanual"':''}${rd.bold?' style="font-weight:900"':''}>${v===''?'':v}</td>`;
+      });
+      const sv=rd.sum(g.stats);
+      html+=`<td class="ptotal"${rd.bold?' style="font-weight:900"':''}>${sv===''?'':sv}</td>`;
+    });
+    html+='</tr>';
+  });
+  html+='</tbody></table>';
+  html+=`<div style="font-size:10px;color:#666;margin-top:10px;line-height:1.6">
+    ※「デザイン料」「所得税（手動調整）」は手入力欄です。「調理手当」はスタッフ設定の月額手当を表示しています。<br>
+    ※ 所得税は源泉徴収税額表（月額表・甲欄）の概算自動計算です（扶養0人・社会保険料控除なし前提）。<br>
+    ※ 繁忙期時間数は通常の労働時間と重複集計しており、繁忙期手当は割増分のみを別途加算しています。
+  </div>`;
+  return html;
+}
+function openPrintView(){
+  const key=document.getElementById('month-sel')?.value;
+  if(!key){alert('「月次集計」で対象期間を選択してから印刷してください');return;}
+  document.getElementById('print-area').innerHTML=buildPrintTable(key);
+  document.getElementById('print-overlay').classList.add('open');
+}
+function closePrintView(){document.getElementById('print-overlay').classList.remove('open')}
+
+/* ── 勤怠記録 編集 ── */
+function openRecordEditModal(id){
+  const r=records.find(x=>x.id===id);if(!r)return;
+  document.getElementById('redit-id').value=id;
+  const sel=document.getElementById('redit-staff');
+  sel.innerHTML=staffList.map(s=>`<option value="${s.id}">[${storeShort(s.store)}] ${s.name}</option>`).join('');
+  sel.value=r.staffId;
+  document.getElementById('redit-date').value=r.date;
+  document.getElementById('redit-in').value=r.inT;
+  document.getElementById('redit-out').value=r.outT;
+  document.getElementById('redit-transport').value=r.transport||0;
+  document.getElementById('record-edit-modal').classList.add('open');
+}
+function closeRecordEditModal(){document.getElementById('record-edit-modal').classList.remove('open')}
+function saveRecordEdit(){
+  const id=parseInt(document.getElementById('redit-id').value);
+  const r=records.find(x=>x.id===id);if(!r)return;
+  const staffId=parseInt(document.getElementById('redit-staff').value);
+  const st=staffList.find(s=>s.id===staffId);if(!st){alert('スタッフを選択してください');return;}
+  const date=document.getElementById('redit-date').value;
+  const inT=roundTo15(document.getElementById('redit-in').value);
+  const outT=roundTo15(document.getElementById('redit-out').value);
+  const transport=parseInt(document.getElementById('redit-transport').value);
+  if(!date||!inT||!outT){alert('すべての項目を入力してください');return;}
+  const calc=calcPay(date,inT,outT,st.wage,transport);
+  Object.assign(r,{staffId,date,inT,outT,transport,...calc});
+  cloudSave();renderAll();renderCal();renderMonthly();closeRecordEditModal();
+  alert('✅ 記録を更新しました');
+}
 
 /* ── CSV ── */
 function exportCSV(){
@@ -988,7 +1341,7 @@ function exportAnnualCSV(){
   const now=new Date(),months=[];
   for(let i=11;i>=0;i--){const d=new Date(now.getFullYear(),now.getMonth()-i,1);months.push(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`)}
   const rows=[['スタッフ名','店舗',...months.map(k=>{const[y,m]=k.split('-');return parseInt(m)+'月'}),'年間合計']];
-  ['木屋町御池個室店','烏丸三条個室店'].forEach(store=>{
+  STORE_OPTIONS.forEach(store=>{
     staffList.filter(s=>s.store===store).forEach(st=>{
       const pays=months.map(k=>records.filter(r=>r.staffId===st.id&&pKey(r.date)===k).reduce((s,r)=>s+r.totalPay,0));
       rows.push([st.name,store,...pays,pays.reduce((s,v)=>s+v,0)]);
@@ -1004,7 +1357,7 @@ function dlCSV(rows,name){
 /* ── ANNUAL ── */
 function renderAnnual(){
   const cont=document.getElementById('annual-content');
-  const stores=['木屋町御池個室店','烏丸三条個室店'];
+  const stores=STORE_OPTIONS;
   const fS=storeF==='all'?stores:[storeF];
   const now=new Date(),months=[];
   for(let i=11;i>=0;i--){const d=new Date(now.getFullYear(),now.getMonth()-i,1);months.push(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`)}
@@ -1012,8 +1365,7 @@ function renderAnnual(){
   let html='';
   fS.forEach(store=>{
     const sl=staffList.filter(s=>s.store===store);if(!sl.length)return;
-    const isK=store==='木屋町御池個室店';
-    html+=`<div class="store-section-header"><span class="store-badge ${isK?'k':'r'}">${store}</span></div>
+    html+=`<div class="store-section-header"><span class="store-badge ${storeColorClass(store)}">${store}</span></div>
     <div class="card" style="padding:0;overflow:hidden;overflow-x:auto"><table class="annual-table">
     <thead><tr><th>スタッフ</th>${mL.map(l=>`<th>${l}</th>`).join('')}<th>年間合計</th></tr></thead><tbody>`;
     sl.forEach(st=>{
@@ -1035,6 +1387,8 @@ function openModal(id){
   document.getElementById('edit-id').value=id;
   document.getElementById('edit-name').value=st.name;
   document.getElementById('edit-wage').value=st.wage;
+  document.getElementById('edit-allowance').value=st.allowance||0;
+  document.getElementById('edit-gender').value=st.gender||'女';
   document.getElementById('edit-store').value=st.store;
   document.getElementById('edit-modal').classList.add('open');
 }
@@ -1043,11 +1397,13 @@ function saveEdit(){
   const id=parseInt(document.getElementById('edit-id').value);
   const name=document.getElementById('edit-name').value.trim();
   const wage=parseInt(document.getElementById('edit-wage').value);
+  const allowance=parseInt(document.getElementById('edit-allowance').value)||0;
+  const gender=document.getElementById('edit-gender').value;
   const store=document.getElementById('edit-store').value;
   if(!name||!wage){alert('名前と時給を入力してください');return;}
   if(staffList.find(s=>s.name===name&&s.id!==id)){alert('同じ名前のスタッフが存在します');return;}
   const st=staffList.find(s=>s.id===id);if(!st)return;
-  st.name=name;st.wage=wage;st.store=store;
+  st.name=name;st.wage=wage;st.allowance=allowance;st.gender=gender;st.store=store;
   cloudSave();renderAll();closeModal();alert('✅ スタッフ情報を更新しました');
 }
 
@@ -1055,15 +1411,37 @@ function saveEdit(){
 function addStaff(){
   const name=document.getElementById('st-name').value.trim();
   const wage=parseInt(document.getElementById('st-wage').value);
+  const allowance=parseInt(document.getElementById('st-allowance').value)||0;
+  const gender=document.getElementById('st-gender').value;
   const store=document.getElementById('st-store').value;
   if(!name||!wage){alert('名前と時給を入力してください');return;}
   if(staffList.find(s=>s.name===name)){alert('同じ名前のスタッフが存在します');return;}
-  staffList.push({name,wage,store,id:Date.now()});
-  cloudSave();renderAll();document.getElementById('st-name').value='';
+  staffList.push({name,wage,allowance,gender,store,id:Date.now()});
+  cloudSave();renderAll();document.getElementById('st-name').value='';document.getElementById('st-allowance').value=0;
 }
 function removeStaff(id){
   if(!confirm('削除しますか？（過去の記録は残ります）'))return;
   staffList=staffList.filter(s=>s.id!==id);cloudSave();renderAll();
+}
+function fillBusySettingsForm(){
+  const a=document.getElementById('busy-start');if(!a)return;
+  document.getElementById('busy-start').value=appSettings.busyStart;
+  document.getElementById('busy-end').value=appSettings.busyEnd;
+  document.getElementById('busy-rate-type').value=appSettings.busyRateType;
+  document.getElementById('busy-rate-value').value=appSettings.busyRateValue;
+}
+function saveBusySettings(){
+  const re=/^(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
+  const s=document.getElementById('busy-start').value.trim();
+  const e=document.getElementById('busy-end').value.trim();
+  if(!re.test(s)||!re.test(e)){alert('日付は MM-DD 形式で入力してください（例：12-21）');return;}
+  appSettings.busyStart=s;
+  appSettings.busyEnd=e;
+  appSettings.busyRateType=document.getElementById('busy-rate-type').value;
+  appSettings.busyRateValue=parseFloat(document.getElementById('busy-rate-value').value)||0;
+  cloudSave();
+  if(document.getElementById('monthly')?.classList.contains('active'))renderMonthlySummary();
+  alert('✅ 繁忙期設定を保存しました');
 }
 function renderStaffList(){
   const el=document.getElementById('staff-list');
@@ -1071,9 +1449,9 @@ function renderStaffList(){
   const g={};staffList.forEach(s=>{if(!g[s.store])g[s.store]=[];g[s.store].push(s)});
   el.innerHTML=Object.entries(g).map(([store,list])=>`
     <div style="margin-bottom:.75rem">
-      <div class="store-badge ${store==='木屋町御池個室店'?'k':'r'}" style="margin-bottom:.5rem;display:inline-block">${store}</div>
+      <div class="store-badge ${storeColorClass(store)}" style="margin-bottom:.5rem;display:inline-block">${store}</div>
       ${list.map(s=>`<div class="list-item">
-        <div><span style="font-weight:700">${s.name}</span><span style="font-family:'DM Mono',monospace;color:var(--ink2);margin-left:10px">¥${s.wage.toLocaleString()}/h</span></div>
+        <div><span style="font-weight:700">${s.name}</span><span style="font-family:'DM Mono',monospace;color:var(--ink2);margin-left:10px">¥${s.wage.toLocaleString()}/h</span>${s.allowance?`<span style="font-family:'DM Mono',monospace;color:var(--purple);margin-left:8px">手当¥${s.allowance.toLocaleString()}/月</span>`:''}</div>
         <div style="display:flex;gap:6px">
           <button class="btn btn-amber" style="padding:4px 10px;font-size:11px" onclick="openModal(${s.id})">✏️ 編集</button>
           <button class="btn btn-ghost" style="padding:4px 10px;font-size:11px" onclick="removeStaff(${s.id})">削除</button>
@@ -1081,9 +1459,24 @@ function renderStaffList(){
       </div>`).join('')}
     </div>`).join('');
 }
+let _ciStoreFilter='all';
+function renderCiStoreFilter(){
+  const el=document.getElementById('ci-store-filter');if(!el)return;
+  const stores=activeStores();
+  let html=`<button class="member-btn ${_ciStoreFilter==='all'?'active':''}" onclick="setCiStoreFilter('all',this)">全員</button>`;
+  stores.forEach(s=>{html+=`<button class="member-btn ${_ciStoreFilter===s?'active':''}" onclick="setCiStoreFilter('${s}',this)">${storeShort(s)}</button>`;});
+  el.innerHTML=html;
+}
+function setCiStoreFilter(v,btn){
+  _ciStoreFilter=v;
+  document.querySelectorAll('#ci-store-filter .member-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  renderStaffSelect();
+}
 function renderStaffSelect(){
   const el=document.getElementById('ci-staff');
-  el.innerHTML=staffList.length?staffList.map(s=>`<option value="${s.id}">[${s.store==='木屋町御池個室店'?'木屋町':'烏丸'}] ${s.name}</option>`).join(''):'<option value="">（スタッフなし）</option>';
+  const list=_ciStoreFilter==='all'?staffList:staffList.filter(s=>s.store===_ciStoreFilter);
+  el.innerHTML=list.length?list.map(s=>`<option value="${s.id}">[${storeShort(s.store)}] ${s.name}</option>`).join(''):'<option value="">（該当スタッフなし）</option>';
   if(me&&me.role==='staff'){el.value=me.staffId;el.disabled=true;}else{el.disabled=false;}
 }
 
@@ -1097,7 +1490,7 @@ function clearAll(){
   staffList=[];records=[];cloudSave();renderAll();alert('削除しました');
 }
 
-function renderAll(){renderStaffList();renderStaffSelect();renderRecent();buildStaffSel()}
+function renderAll(){renderStaffList();renderCiStoreFilter();renderStaffSelect();renderRecent();buildStaffSel();if(document.getElementById('monthly')?.classList.contains('active')){buildMOpts();renderMonthly();renderMonthlySummary();}}
 
 /* ── INIT：BIN IDが埋め込まれているので設定画面不要 ── */
 document.getElementById('ci-date').value = new Date().toISOString().slice(0,10);
