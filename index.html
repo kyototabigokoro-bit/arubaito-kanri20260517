@@ -948,11 +948,22 @@ function openDayPanel(ds,recs){
       </div>
       <div style="text-align:right">
         <div class="day-pay">${fY(r.totalPay)}</div>
-        ${isA?`<button class="btn btn-amber" style="padding:3px 8px;font-size:11px;margin-top:4px" onclick="openRecordEditModal(${r.id})">✏️ 編集</button>`:''}
+        ${isA?`<div style="display:flex;gap:4px;margin-top:4px;justify-content:flex-end">
+          <button class="btn btn-amber" style="padding:3px 8px;font-size:11px" onclick="openRecordEditModal(${r.id})">✏️ 編集</button>
+          <button class="btn btn-ghost" style="padding:3px 8px;font-size:11px" onclick="removeRecordInDay(${r.id},'${ds}')">🗑 削除</button>
+        </div>`:''}
       </div>
     </div>`;
   });
   body.innerHTML=html;panel.classList.add('open');panel.scrollIntoView({behavior:'smooth',block:'nearest'});
+}
+function removeRecordInDay(id,ds){
+  if(!confirm('この勤怠記録を削除しますか？'))return;
+  records=records.filter(r=>r.id!==id);
+  cloudSave();renderAll();renderCal();
+  if(document.getElementById('monthly')?.classList.contains('active')){renderMonthly();renderMonthlySummary();}
+  const recs=records.filter(r=>r.date===ds&&(storeF==='all'||staffList.find(s=>s.id===r.staffId)?.store===storeF));
+  if(recs.length){openDayPanel(ds,recs);}else{document.getElementById('day-panel').classList.remove('open');}
 }
 function closeDayPanel(){document.getElementById('day-panel').classList.remove('open')}
 
