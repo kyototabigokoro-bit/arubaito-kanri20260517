@@ -205,9 +205,6 @@ h3{font-size:12px;font-weight:700;color:var(--ink2);margin-bottom:.75rem;text-tr
   padding:10px;min-width:220px;
 }
 .time-dropdown.open{display:block}
-.time-dropdown-row{display:flex;gap:6px;align-items:center;margin-bottom:8px}
-.time-dropdown-label{font-size:11px;font-weight:700;color:var(--ink3);width:32px}
-.time-scroll{display:flex;gap:4px;flex-wrap:wrap;flex:1}
 .time-btn{
   padding:5px 8px;border-radius:var(--r-sm);border:1px solid var(--border);
   background:var(--paper);font-size:13px;font-family:'DM Mono',monospace;
@@ -216,6 +213,10 @@ h3{font-size:12px;font-weight:700;color:var(--ink2);margin-bottom:.75rem;text-tr
 }
 .time-btn:hover{background:var(--green-pale);border-color:var(--green);color:var(--green)}
 .time-btn.selected{background:var(--green);color:#fff;border-color:var(--green);font-weight:700}
+.time-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:4px}
+.time-grid.minutes{max-height:240px;overflow-y:auto;padding-right:2px}
+.time-stage-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+.time-back-btn{background:none;border:none;color:var(--green);font-size:12px;font-weight:700;cursor:pointer;padding:2px 4px}
 .time-picker-wrap{position:relative}
 .hamburger{display:none;position:fixed;top:12px;left:12px;z-index:300;width:40px;height:40px;border-radius:50%;background:var(--ink);color:#fff;border:none;cursor:pointer;font-size:18px;align-items:center;justify-content:center}
 .mob-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:150}
@@ -548,8 +549,8 @@ h3{font-size:12px;font-weight:700;color:var(--ink2);margin-bottom:.75rem;text-tr
       <div class="field"><label>日付</label><input type="date" id="redit-date"></div>
     </div>
     <div class="row" style="margin-bottom:12px">
-      <div class="field"><label>出勤</label><input type="time" id="redit-in" step="900"></div>
-      <div class="field"><label>退勤</label><input type="time" id="redit-out" step="900"></div>
+      <div class="field"><label>出勤</label><input type="time" id="redit-in" step="60"></div>
+      <div class="field"><label>退勤</label><input type="time" id="redit-out" step="60"></div>
       <div class="field"><label>交通費</label>
         <select id="redit-transport"><option value="500">あり（500円）</option><option value="0">なし</option></select>
       </div>
@@ -967,45 +968,55 @@ function removeRecordInDay(id,ds){
 }
 function closeDayPanel(){document.getElementById('day-panel').classList.remove('open')}
 
-/* 時刻を15分単位に丸める */
+/* 時刻はそのまま（分単位） */
 function roundTo15(t){
   if(!t) return t;
   const [h,m] = t.split(':').map(Number);
-  const rounded = Math.round(m/15)*15;
-  const rh = rounded===60 ? h+1 : h;
-  const rm = rounded===60 ? 0 : rounded;
-  return `${String(rh%24).padStart(2,'0')}:${String(rm).padStart(2,'0')}`;
+  return `${String(h%24).padStart(2,'0')}:${String(m).padStart(2,'0')}`;
 }
 
-/* ── 15分刻みタイムピッカー ── */
+/* ── 1分刻みタイムピッカー（時→分の2段階選択） ── */
 const HOURS = Array.from({length:24},(_,i)=>i);
-const MINS  = [0,15,30,45];
+const MINS  = Array.from({length:60},(_,i)=>i);
+const _picker = {in:{stage:'hour',h:null,m:null}, out:{stage:'hour',h:null,m:null}};
 
 function buildDropdown(type){
-  const dd = document.getElementById(`${type}-dropdown`);
   const curVal = document.getElementById(`ci-${type}`).value;
-  const [curH, curM] = curVal ? curVal.split(':').map(Number) : [null,null];
-  dd.innerHTML = `
-    <div style="font-size:11px;font-weight:700;color:var(--ink3);margin-bottom:8px;letter-spacing:.05em">${type==='in'?'出勤':'退勤'}時間を選択</div>
-    <div style="max-height:280px;overflow-y:auto;">
-      ${HOURS.map(h=>`
-        <div class="time-dropdown-row">
-          <div class="time-dropdown-label">${String(h).padStart(2,'0')}時</div>
-          <div class="time-scroll">
-            ${MINS.map(m=>{
-              const val=`${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`;
-              const sel=(h===curH&&m===curM)?'selected':'';
-              return `<button class="time-btn ${sel}" onclick="selectTime('${type}','${val}')">${String(m).padStart(2,'0')}</button>`;
-            }).join('')}
-          </div>
-        </div>`).join('')}
-    </div>`;
-  if(curH!==null){
+  const [h, m] = curVal ? curVal.split(':').map(Number) : [null,null];
+  _picker[type] = {stage: h!==null?'minute':'hour', h, m};
+  renderPicker(type);
+}
+function renderPicker(type){
+  const dd = document.getElementById(`${type}-dropdown`);
+  const st = _picker[type];
+  if(st.stage==='hour'){
+    dd.innerHTML = `
+      <div style="font-size:11px;font-weight:700;color:var(--ink3);margin-bottom:8px;letter-spacing:.05em">${type==='in'?'出勤':'退勤'}時間を選択 — 時</div>
+      <div class="time-grid">
+        ${HOURS.map(hh=>`<button class="time-btn ${hh===st.h?'selected':''}" onclick="pickHour('${type}',${hh})">${String(hh).padStart(2,'0')}</button>`).join('')}
+      </div>`;
+  }else{
+    dd.innerHTML = `
+      <div class="time-stage-head">
+        <div style="font-size:11px;font-weight:700;color:var(--ink3);letter-spacing:.05em">${type==='in'?'出勤':'退勤'}時間を選択 — ${String(st.h).padStart(2,'0')}時 分</div>
+        <button class="time-back-btn" onclick="backToHour('${type}')">‹ 時を選び直す</button>
+      </div>
+      <div class="time-grid minutes">
+        ${MINS.map(mm=>`<button class="time-btn ${mm===st.m?'selected':''}" onclick="selectTime('${type}','${String(st.h).padStart(2,'0')}:${String(mm).padStart(2,'0')}')">${String(mm).padStart(2,'0')}</button>`).join('')}
+      </div>`;
     setTimeout(()=>{
       const sel=dd.querySelector('.time-btn.selected');
-      if(sel)sel.scrollIntoView({block:'center',behavior:'smooth'});
-    },50);
+      if(sel)sel.scrollIntoView({block:'center'});
+    },30);
   }
+}
+function pickHour(type,h){
+  _picker[type].h=h;_picker[type].stage='minute';_picker[type].m=null;
+  renderPicker(type);
+}
+function backToHour(type){
+  _picker[type].stage='hour';
+  renderPicker(type);
 }
 
 function togglePicker(type){
