@@ -351,7 +351,7 @@ h3{font-size:12px;font-weight:700;color:var(--ink2);margin-bottom:.75rem;text-tr
             <div class="time-picker-wrap">
               <div class="time-picker">
                 <div class="time-picker-label">出勤時間</div>
-                <div class="time-picker-display" id="in-display" onclick="togglePicker('in')">
+                <div class="time-picker-display" id="in-display" onclick="togglePicker('in',event)">
                   <span id="in-val" class="placeholder">選択してください</span>
                 </div>
               </div>
@@ -360,7 +360,7 @@ h3{font-size:12px;font-weight:700;color:var(--ink2);margin-bottom:.75rem;text-tr
             <div class="time-picker-wrap">
               <div class="time-picker">
                 <div class="time-picker-label">退勤時間</div>
-                <div class="time-picker-display" id="out-display" onclick="togglePicker('out')">
+                <div class="time-picker-display" id="out-display" onclick="togglePicker('out',event)">
                   <span id="out-val" class="placeholder">選択してください</span>
                 </div>
               </div>
@@ -993,16 +993,16 @@ function renderPicker(type){
     dd.innerHTML = `
       <div style="font-size:11px;font-weight:700;color:var(--ink3);margin-bottom:8px;letter-spacing:.05em">${type==='in'?'出勤':'退勤'}時間を選択 — 時</div>
       <div class="time-grid">
-        ${HOURS.map(hh=>`<button class="time-btn ${hh===st.h?'selected':''}" onclick="pickHour('${type}',${hh})">${String(hh).padStart(2,'0')}</button>`).join('')}
+        ${HOURS.map(hh=>`<button class="time-btn ${hh===st.h?'selected':''}" onclick="event.stopPropagation();pickHour('${type}',${hh})">${String(hh).padStart(2,'0')}</button>`).join('')}
       </div>`;
   }else{
     dd.innerHTML = `
       <div class="time-stage-head">
         <div style="font-size:11px;font-weight:700;color:var(--ink3);letter-spacing:.05em">${type==='in'?'出勤':'退勤'}時間を選択 — ${String(st.h).padStart(2,'0')}時 分</div>
-        <button class="time-back-btn" onclick="backToHour('${type}')">‹ 時を選び直す</button>
+        <button class="time-back-btn" onclick="event.stopPropagation();backToHour('${type}')">‹ 時を選び直す</button>
       </div>
       <div class="time-grid minutes">
-        ${MINS.map(mm=>`<button class="time-btn ${mm===st.m?'selected':''}" onclick="selectTime('${type}','${String(st.h).padStart(2,'0')}:${String(mm).padStart(2,'0')}')">${String(mm).padStart(2,'0')}</button>`).join('')}
+        ${MINS.map(mm=>`<button class="time-btn ${mm===st.m?'selected':''}" onclick="event.stopPropagation();selectTime('${type}','${String(st.h).padStart(2,'0')}:${String(mm).padStart(2,'0')}')">${String(mm).padStart(2,'0')}</button>`).join('')}
       </div>`;
     setTimeout(()=>{
       const sel=dd.querySelector('.time-btn.selected');
@@ -1019,7 +1019,8 @@ function backToHour(type){
   renderPicker(type);
 }
 
-function togglePicker(type){
+function togglePicker(type,event){
+  if(event)event.stopPropagation();
   const dd=document.getElementById(`${type}-dropdown`);
   const other=type==='in'?'out':'in';
   document.getElementById(`${other}-dropdown`).classList.remove('open');
@@ -1046,9 +1047,10 @@ function selectTime(type,val){
 document.addEventListener('click',e=>{
   ['in','out'].forEach(t=>{
     const wrap=document.getElementById(`${t}-dropdown`)?.closest('.time-picker-wrap');
-    if(wrap&&!wrap.contains(e.target)){
+    const display=document.getElementById(`${t}-display`);
+    if(wrap&&!wrap.contains(e.target)&&display&&!display.contains(e.target)){
       document.getElementById(`${t}-dropdown`)?.classList.remove('open');
-      document.getElementById(`${t}-display`)?.classList.remove('open');
+      display?.classList.remove('open');
     }
   });
 });
